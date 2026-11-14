@@ -1,48 +1,54 @@
 #!/usr/bin/env python3
-"""food-picture-01 entry for make.fun entry for make.fun.
+"""food-picture-01 entry: a steaming bowl of ramen, close up.
 
-The image is a single file shipped in this repository (entry.png).
-This program copies it byte-for-byte to the output directory, so two runs
-write identical bytes. Standard library only.
+Chopsticks lift the noodles out of the broth, steam rising, soft window
+light. The picture ships in this repo as entry.png. Running this program
+drops a byte-identical copy into the grader's output folder. Pure standard
+library, no network, no randomness: two runs produce the same file.
 """
-import hashlib
-import os
-import shutil
-import sys
+import hashlib, os, shutil, sys
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-OUTPUT_DIR = os.environ.get("MAKEFUN_OUTPUT_DIR", "/output")
+REPO = os.path.dirname(os.path.abspath(__file__))
+SOURCE = os.path.join(REPO, "entry.png")
+MAX_BYTES = 1024 * 1024
 
 
-def sha256(path):
-    h = hashlib.sha256()
-    with open(path, "rb") as f:
-        for chunk in iter(lambda: f.read(65536), b""):
-            h.update(chunk)
-    return h.hexdigest()
+def file_digest(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        while True:
+            block = handle.read(65536)
+            if not block:
+                break
+            digest.update(block)
+    return digest.hexdigest()
 
 
-def main():
-    src = os.path.join(HERE, "entry.png")
-    dst = os.path.join(OUTPUT_DIR, "entry.png")
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
-    shutil.copyfile(src, dst)
-    # Guard the determinism the grader requires: the copy must be exact.
-    if sha256(src) != sha256(dst):
-        print("entry.png copy mismatch", file=sys.stderr)
-        sys.exit(1)
-    # Quality gate: the output must be a real image file within the kit's
-    # limits (JPEG/PNG magic bytes, at most 1 MiB), or the run must fail
-    # loudly instead of handing the grader a broken entry.
-    size = os.path.getsize(dst)
-    with open(dst, "rb") as f:
-        magic = f.read(8)
-    is_jpeg = magic[:3] == b"\xff\xd8\xff"
-    is_png = magic == b"\x89PNG\r\n\x1a\n"
-    if not (is_jpeg or is_png) or size > 1024 * 1024:
-        print(f"entry.png invalid: {size} bytes, magic {magic.hex()}", file=sys.stderr)
-        sys.exit(1)
+def main() -> int:
+    out_dir = os.environ.get("MAKEFUN_OUTPUT_DIR", "/output")
+    target = os.path.join(out_dir, "entry.png")
+    if not os.path.isfile(SOURCE):
+        print(f"missing bundled image: {SOURCE}", file=sys.stderr)
+        return 1
+    os.makedirs(out_dir, exist_ok=True)
+    shutil.copyfile(SOURCE, target)
+    # A short write would silently hand the grader a corrupt image, so
+    # verify the copy byte for byte before doing anything else with it.
+    if file_digest(SOURCE) != file_digest(target):
+        print("copy mismatch: entry.png", file=sys.stderr)
+        return 1
+    size = os.path.getsize(target)
+    with open(target, "rb") as handle:
+        header = handle.read(8)
+    # The kit caps entries at 1 MiB and only accepts real JPEG/PNG files.
+    looks_jpeg = header[:3] == b"\xff\xd8\xff"
+    looks_png = header == b"\x89PNG\r\n\x1a\n"
+    if size > MAX_BYTES or not (looks_jpeg or looks_png):
+        print(f"entry.png invalid: {size} bytes, header {header.hex()}", file=sys.stderr)
+        return 1
+    print(f"wrote {target} ({size} bytes, sha256 {file_digest(target)[:16]}...); deterministic copy")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
