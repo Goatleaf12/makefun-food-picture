@@ -31,6 +31,17 @@ def main():
     if sha256(src) != sha256(dst):
         print("entry.png copy mismatch", file=sys.stderr)
         sys.exit(1)
+    # Quality gate: the output must be a real image file within the kit's
+    # limits (JPEG/PNG magic bytes, at most 1 MiB), or the run must fail
+    # loudly instead of handing the grader a broken entry.
+    size = os.path.getsize(dst)
+    with open(dst, "rb") as f:
+        magic = f.read(8)
+    is_jpeg = magic[:3] == b"\xff\xd8\xff"
+    is_png = magic == b"\x89PNG\r\n\x1a\n"
+    if not (is_jpeg or is_png) or size > 1024 * 1024:
+        print(f"entry.png invalid: {size} bytes, magic {magic.hex()}", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":
